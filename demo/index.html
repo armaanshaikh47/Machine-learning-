@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DT Tool Identifier</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0d1117;
+      --surface:  #161b22;
+      --border:   #21262d;
+      --accent:   #e94560;
+      --gold:     #f0a500;
+      --muted:    #8b949e;
+      --text:     #e6edf3;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ──────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-icon { font-size: 1.4rem; }
+    .logo-title { font-size: 1.1rem; font-weight: 700; color: var(--accent); }
+    .logo-sub   { font-size: 0.75rem; color: var(--muted); }
+
+    /* ── Buttons ─────────────────────────────────── */
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      padding: 10px 20px;
+      transition: opacity .15s, transform .1s;
+    }
+    button:hover  { opacity: .85; }
+    button:active { transform: scale(.97); }
+
+    .btn-primary  { background: var(--accent); color: #fff; }
+    .btn-outline  { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-gold     { background: var(--gold); color: #111; }
+    .btn-sm       { padding: 7px 14px; font-size: 0.8rem; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ── Setup Screen ────────────────────────────── */
+    #setup-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: calc(100vh - 57px);
+      padding: 24px;
+    }
+
+    .setup-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 36px 32px;
+      max-width: 520px;
+      width: 100%;
+    }
+
+    .setup-icon { font-size: 3rem; margin-bottom: 16px; }
+
+    .setup-card h2 {
+      font-size: 1.4rem;
+      margin-bottom: 8px;
+    }
+
+    .setup-card p {
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 11px 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.9rem;
+      margin-bottom: 8px;
+    }
+    input[type="text"]::placeholder { color: #444d56; }
+    input[type="text"]:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .hint {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+    .hint strong { color: var(--text); }
+
+    /* ── App Screen ──────────────────────────────── */
+    #app-screen {
+      display: none;
+      padding: 20px 24px 40px;
+      max-width: 1080px;
+      margin: 0 auto;
+    }
+
+    .app-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      gap: 10px;
+    }
+
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .live-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #3fb950;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .4; }
+    }
+
+    .toolbar-actions { display: flex; gap: 8px; }
+
+    /* ── Grid layout ─────────────────────────────── */
+    .app-grid {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 18px;
+    }
+
+    /* ── Webcam panel ────────────────────────────── */
+    .webcam-panel { display: flex; flex-direction: column; gap: 14px; }
+
+    #webcam-container {
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      aspect-ratio: 4/3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #webcam-container canvas { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+    /* ── Right panel ─────────────────────────────── */
+    .right-panel { display: flex; flex-direction: column; gap: 14px; }
+
+    /* ── Quiz panel ──────────────────────────────── */
+    #quiz-panel {
+      display: none;
+      background: var(--surface);
+      border: 2px solid var(--gold);
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .quiz-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    #quiz-target {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--gold);
+      text-transform: capitalize;
+      margin-bottom: 8px;
+    }
+
+    #quiz-hold-bar-track {
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 8px 0;
+    }
+    #quiz-hold-bar {
+      height: 100%;
+      background: var(--gold);
+      border-radius: 3px;
+      width: 0%;
+      transition: width .1s linear;
+    }
+
+    #quiz-feedback { font-size: 1rem; min-height: 1.4em; margin-bottom: 6px; }
+    #quiz-feedback.correct { color: #3fb950; }
+    #quiz-feedback.wrong   { color: var(--accent); }
+
+    .quiz-stats {
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    /* ── Prediction bars ─────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+    }
+
+    .card-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    .bar-row { margin-bottom: 10px; }
+
+    .bar-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      margin-bottom: 4px;
+    }
+    .bar-meta .pct { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+    .bar-track {
+      height: 8px;
+      background: var(--bg);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--gold));
+      border-radius: 4px;
+      transition: width .12s ease;
+    }
+
+    /* ── Fact card ───────────────────────────────── */
+    #fact-card { flex: 1; }
+
+    .fact-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    #fact-emoji    { font-size: 2.4rem; }
+    #fact-name     { font-size: 1.2rem; font-weight: 700; text-transform: capitalize; }
+    #fact-conf     { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+
+    .fact-item {
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 11px 14px;
+      margin-bottom: 8px;
+    }
+    .fact-item-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: .7px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .fact-item-value { font-size: 0.88rem; line-height: 1.55; }
+
+    /* ── How it works tooltip ────────────────────── */
+    #how-panel {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      font-size: 0.87rem;
+      line-height: 1.65;
+      color: var(--muted);
+    }
+    #how-panel strong { color: var(--text); }
+
+    /* ── Responsive ──────────────────────────────── */
+    @media (max-width: 720px) {
+      .app-grid { grid-template-columns: 1fr; }
+      .toolbar-actions { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span class="logo-icon">🔧</span>
+    <div>
+      <div class="logo-title">DT Tool Identifier</div>
+      <div class="logo-sub">Design &amp; Technology · Teachable Machine</div>
+    </div>
+  </div>
+  <div id="header-right"></div>
+</header>
+
+<!-- ── Setup Screen ────────────────────────────────── -->
+<div id="setup-screen">
+  <div class="setup-card">
+    <div class="setup-icon">🎓</div>
+    <h2>Welcome to DT Tool Identifier</h2>
+    <p>
+      Hold a design &amp; technology tool up to your webcam and the app will identify it,
+      show what it's used for, and quiz your class on tool recognition.
+      You'll need a model trained with Google Teachable Machine first.
+    </p>
+
+    <label for="model-url">Teachable Machine Model URL</label>
+    <input
+      type="text"
+      id="model-url"
+      placeholder="https://teachablemachine.withgoogle.com/models/XXXXX/"
+    />
+    <div class="hint">
+      Go to <strong>teachablemachine.withgoogle.com</strong> → create an Image Project →
+      train with your classroom tools → Export → copy the <strong>shareable link</strong>.
+      <br/><br/>
+      No model yet? Try the sample model below to explore the interface first.
+    </div>
+
+    <div style="display:flex;gap:10px;margin-bottom:14px;">
+      <button class="btn-primary" style="flex:1" onclick="loadModel()">
+        Load Model &amp; Start Camera
+      </button>
+    </div>
+    <button class="btn-outline btn-sm" style="width:100%" onclick="loadSampleModel()">
+      Use Sample Model (Shapes: Circle / Square / Triangle)
+    </button>
+  </div>
+</div>
+
+<!-- ── App Screen ──────────────────────────────────── -->
+<div id="app-screen">
+
+  <div class="app-toolbar">
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      <span>Live — <span id="model-label-count">0</span> classes loaded</span>
+    </div>
+    <div class="toolbar-actions">
+      <button class="btn-outline btn-sm" onclick="toggleHow()" id="how-btn">How it works</button>
+      <button class="btn-gold btn-sm"    onclick="toggleQuiz()" id="quiz-btn">▶ Start Quiz</button>
+      <button class="btn-outline btn-sm" onclick="goBack()">Change Model</button>
+    </div>
+  </div>
+
+  <!-- "How it works" expandable -->
+  <div id="how-panel" style="margin-bottom:14px;">
+    <strong>How this works:</strong><br/>
+    Your model was trained using <strong>transfer learning</strong> — it builds on top of
+    MobileNet, a neural network that has already learned to recognise millions of images.
+    Only the final "classification layer" was retrained with your photos.
+    <br/><br/>
+    Each frame from your webcam is resized to <strong>224 × 224 px</strong> and passed
+    through the network. The bars below show how confident the model is for each class
+    (they always add up to 100%). The top result updates the fact card on the right.
+    <br/><br/>
+    <strong>Quiz mode</strong> picks a random class and asks students to hold up that tool.
+    They must hold it steady for half a second (85 %+ confidence) to score a point.
+  </div>
+
+  <div class="app-grid">
+
+    <!-- Left: webcam -->
+    <div class="webcam-panel">
+      <div id="webcam-container"></div>
+    </div>
+
+    <!-- Right: predictions + fact card -->
+    <div class="right-panel">
+
+      <!-- Quiz panel -->
+      <div id="quiz-panel">
+        <div class="quiz-label">Hold up this tool:</div>
+        <div id="quiz-target">—</div>
+        <div id="quiz-hold-bar-track"><div id="quiz-hold-bar"></div></div>
+        <div id="quiz-feedback"></div>
+        <div class="quiz-stats" id="quiz-score">Score: 0 &nbsp;·&nbsp; Round: 0</div>
+      </div>
+
+      <!-- Confidence bars -->
+      <div class="card">
+        <div class="card-title">Live Predictions</div>
+        <div id="label-container"></div>
+      </div>
+
+      <!-- Fact card -->
+      <div class="card" id="fact-card">
+        <div class="card-title">Tool Info</div>
+        <div class="fact-header">
+          <div id="fact-emoji">🔧</div>
+          <div>
+            <div id="fact-name">Waiting for detection…</div>
+            <div id="fact-conf"></div>
+          </div>
+        </div>
+        <div id="fact-content"></div>
+      </div>
+
+    </div><!-- /right-panel -->
+  </div><!-- /app-grid -->
+</div><!-- /app-screen -->
+
+<script>
+  // ── Fact database ──────────────────────────────────────────────────────────
+  const FACTS = {
+    "ruler": {
+      emoji: "📏",
+      use:    "Measuring lengths and drawing straight lines accurately.",
+      safety: "Store flat — a bent ruler gives inaccurate measurements.",
+      fact:   "Standard school rulers are 30 cm, but engineers use 1 m steel rules."
+    },
+    "try square": {
+      emoji: "📐",
+      use:    "Marking and testing right angles (90°) on wood or metal.",
+      safety: "Never use it as a hammer — the blade can become misaligned.",
+      fact:   "The word 'try' means to test — you're trying whether it's truly square!"
+    },
+    "marking gauge": {
+      emoji: "📏",
+      use:    "Scribing a line parallel to a straight edge on wood.",
+      safety: "Keep the spur sharp and always push away from your body.",
+      fact:   "Invented in the 18th century and still essential in joinery today."
+    },
+    "compass": {
+      emoji: "🔵",
+      use:    "Drawing accurate circles, arcs, and transferring measurements.",
+      safety: "The point is sharp — always fit the cap when storing.",
+      fact:   "Compasses have been used in technical drawing for over 500 years."
+    },
+    "coping saw": {
+      emoji: "🪚",
+      use:    "Cutting curved shapes and intricate patterns in wood.",
+      safety: "Secure your work in a vice — never hold with your hand.",
+      fact:   "The blade can be rotated 360° so you can cut in any direction."
+    },
+    "tenon saw": {
+      emoji: "🪚",
+      use:    "Making straight, accurate cuts in wood — especially joints.",
+      safety: "Let the saw do the work; forcing it causes the blade to buckle.",
+      fact:   "Named after the 'tenon' in the classic mortise-and-tenon joint."
+    },
+    "hacksaw": {
+      emoji: "🪚",
+      use:    "Cutting metal, plastic, and pipes.",
+      safety: "Wear eye protection — metal filings can cause serious eye injury.",
+      fact:   "Blades are rated in TPI (teeth per inch). More teeth = smoother cut."
+    },
+    "mallet": {
+      emoji: "🔨",
+      use:    "Striking chisels and driving joints without damaging timber.",
+      safety: "Inspect the head before use — a loose head can fly off.",
+      fact:   "Traditionally made from beech wood for its hardness and shock resistance."
+    },
+    "hammer": {
+      emoji: "🔨",
+      use:    "Driving nails and general assembly work.",
+      safety: "Hold the handle near the end for maximum control and power.",
+      fact:   "The claw end removes nails using a lever mechanism — simple machines in action!"
+    },
+    "chisel": {
+      emoji: "🪛",
+      use:    "Cutting and shaping wood, carving mortises and grooves.",
+      safety: "Always cut away from your body. A sharp chisel is safer than a dull one.",
+      fact:   "Dull tools are more dangerous — they require more force and slip more easily."
+    },
+    "screwdriver": {
+      emoji: "🪛",
+      use:    "Driving and removing screws from materials.",
+      safety: "Match the driver head to the screw type exactly to avoid slipping.",
+      fact:   "The Robertson (square) head screwdriver was invented in Canada in 1908."
+    },
+    "file": {
+      emoji: "🗜️",
+      use:    "Smoothing and shaping metal, wood, or hard plastics.",
+      safety: "Always fit a handle — bare tangs can pierce your palm.",
+      fact:   "Files only cut on the forward (push) stroke, not the return."
+    },
+    // Generic fallback keys
+    "circle":   { emoji: "⭕", use: "A perfect round shape.", safety: "Keep your compass point covered.", fact: "The ratio of circumference to diameter is always π ≈ 3.14159." },
+    "square":   { emoji: "🟥", use: "A shape with four equal sides and right angles.", safety: "Draw corners carefully with a try square.", fact: "A square is a special type of rectangle and also a special rhombus." },
+    "triangle": { emoji: "🔺", use: "A three-sided polygon.", safety: "Sharp corners — handle physical triangles carefully.", fact: "The angles of any triangle always add up to 180°." }
+  };
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  let model, webcam, maxPredictions;
+  let quizActive  = false;
+  let quizTarget  = null;
+  let quizScore   = 0;
+  let quizRound   = 0;
+  let holdFrames  = 0;
+  const HOLD_NEEDED = 10; // ~0.5 s at ~20 fps
+
+  // ── Sample model (shapes — publicly available) ─────────────────────────────
+  const SAMPLE_MODEL_URL = "https://teachablemachine.withgoogle.com/models/bXy2kDNi/";
+
+  function loadSampleModel() {
+    document.getElementById("model-url").value = SAMPLE_MODEL_URL;
+    loadModel();
+  }
+
+  // ── Load model ─────────────────────────────────────────────────────────────
+  async function loadModel() {
+    let url = document.getElementById("model-url").value.trim();
+    if (!url) { alert("Please enter a Teachable Machine model URL first."); return; }
+    if (!url.endsWith("/")) url += "/";
+
+    const modelURL    = url + "model.json";
+    const metadataURL = url + "metadata.json";
+
+    const btn = document.querySelector("#setup-screen .btn-primary");
+    btn.textContent = "Loading…";
+    btn.disabled = true;
+
+    try {
+      model          = await tmImage.load(modelURL, metadataURL);
+      maxPredictions = model.getTotalClasses();
+
+      const flip = true;
+      webcam = new tmImage.Webcam(320, 240, flip);
+      await webcam.setup();
+      await webcam.play();
+
+      const wc = document.getElementById("webcam-container");
+      wc.innerHTML = "";
+      wc.appendChild(webcam.canvas);
+
+      // Build prediction bars
+      const labelContainer = document.getElementById("label-container");
+      labelContainer.innerHTML = "";
+      for (let i = 0; i < maxPredictions; i++) {
+        const row = document.createElement("div");
+        row.className = "bar-row";
+        row.innerHTML = `
+          <div class="bar-meta">
+            <span class="label-name">Class ${i + 1}</span>
+            <span class="pct label-pct">0%</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill" style="width:0%"></div></div>`;
+        labelContainer.appendChild(row);
+      }
+
+      document.getElementById("model-label-count").textContent = maxPredictions;
+      document.getElementById("setup-screen").style.display = "none";
+      document.getElementById("app-screen").style.display   = "block";
+
+      window.requestAnimationFrame(loop);
+    } catch (err) {
+      btn.textContent = "Load Model & Start Camera";
+      btn.disabled = false;
+      alert("Could not load model:\n" + err.message +
+            "\n\nCheck the URL is a valid Teachable Machine export link.");
+    }
+  }
+
+  // ── Prediction loop ────────────────────────────────────────────────────────
+  async function loop() {
+    webcam.update();
+    const prediction   = await model.predict(webcam.canvas);
+    const rows         = document.getElementById("label-container").children;
+    let topPrediction  = { className: "", probability: 0 };
+
+    for (let i = 0; i < maxPredictions; i++) {
+      const p   = prediction[i];
+      const pct = (p.probability * 100).toFixed(1);
+      rows[i].querySelector(".label-name").textContent  = p.className;
+      rows[i].querySelector(".label-pct").textContent   = pct + "%";
+      rows[i].querySelector(".bar-fill").style.width    = pct + "%";
+      if (p.probability > topPrediction.probability) topPrediction = p;
+    }
+
+    updateFactCard(topPrediction);
+    if (quizActive) updateQuiz(topPrediction);
+
+    window.requestAnimationFrame(loop);
+  }
+
+  // ── Fact card ──────────────────────────────────────────────────────────────
+  function lookupFacts(className) {
+    const key = className.toLowerCase().trim();
+    if (FACTS[key]) return FACTS[key];
+    // Partial match
+    for (const k of Object.keys(FACTS)) {
+      if (key.includes(k) || k.includes(key)) return FACTS[k];
+    }
+    return null;
+  }
+
+  function updateFactCard(top) {
+    const facts = lookupFacts(top.className);
+    const pct   = Math.round(top.probability * 100);
+
+    document.getElementById("fact-emoji").textContent = facts ? facts.emoji : "🔧";
+    document.getElementById("fact-name").textContent  = top.className;
+    document.getElementById("fact-conf").textContent  =
+      pct >= 70 ? `${pct}% confident` : `${pct}% — try holding the item closer or better lit`;
+
+    if (facts) {
+      document.getElementById("fact-content").innerHTML = `
+        <div class="fact-item">
+          <div class="fact-item-label">What it's used for</div>
+          <div class="fact-item-value">${facts.use}</div>
+        </div>
+        <div class="fact-item">
+          <div class="fact-item-label">Safety tip</div>
+          <div class="fact-item-value">${facts.safety}</div>
+        </div>
+        <div class="fact-item">
+          <div class="fact-item-label">Did you know?</div>
+          <div class="fact-item-value">${facts.fact}</div>
+        </div>`;
+    } else {
+      document.getElementById("fact-content").innerHTML = `
+        <div class="fact-item">
+          <div class="fact-item-label">Detected</div>
+          <div class="fact-item-value">${top.className}</div>
+        </div>
+        <div class="fact-item" style="color:var(--muted);font-size:0.82rem;background:none;padding:4px 0;">
+          No fact card found. You can add one to the FACTS dictionary in the source HTML!
+        </div>`;
+    }
+  }
+
+  // ── Quiz mode ──────────────────────────────────────────────────────────────
+  function getLabels() {
+    const names = [];
+    const rows  = document.getElementById("label-container").children;
+    for (const r of rows) names.push(r.querySelector(".label-name").textContent);
+    return names.filter(n => n && !n.startsWith("Class "));
+  }
+
+  function nextRound() {
+    const labels = getLabels();
+    if (!labels.length) return;
+    quizRound++;
+    holdFrames = 0;
+    quizTarget = labels[Math.floor(Math.random() * labels.length)];
+    document.getElementById("quiz-target").textContent   = quizTarget;
+    document.getElementById("quiz-hold-bar").style.width = "0%";
+    document.getElementById("quiz-feedback").textContent  = "";
+    document.getElementById("quiz-feedback").className    = "";
+    updateScoreDisplay();
+  }
+
+  function updateQuiz(top) {
+    if (!quizTarget) { nextRound(); return; }
+
+    const match = top.className === quizTarget && top.probability >= 0.85;
+
+    if (match) {
+      holdFrames++;
+      const progress = Math.min(holdFrames / HOLD_NEEDED * 100, 100);
+      document.getElementById("quiz-hold-bar").style.width = progress + "%";
+
+      if (holdFrames >= HOLD_NEEDED) {
+        quizScore++;
+        const fb = document.getElementById("quiz-feedback");
+        fb.textContent = "✓ Correct!";
+        fb.className   = "correct";
+        holdFrames = 0;
+        updateScoreDisplay();
+        setTimeout(nextRound, 1400);
+      }
+    } else {
+      holdFrames = Math.max(0, holdFrames - 1);
+      document.getElementById("quiz-hold-bar").style.width =
+        (holdFrames / HOLD_NEEDED * 100) + "%";
+
+      const fb = document.getElementById("quiz-feedback");
+      if (top.probability > 0.70 && top.className !== quizTarget) {
+        fb.textContent = `That looks like a ${top.className}…`;
+        fb.className   = "wrong";
+      } else if (holdFrames === 0) {
+        fb.textContent = "";
+        fb.className   = "";
+      }
+    }
+  }
+
+  function updateScoreDisplay() {
+    document.getElementById("quiz-score").innerHTML =
+      `Score: <strong>${quizScore}</strong> &nbsp;·&nbsp; Round: ${quizRound}`;
+  }
+
+  function toggleQuiz() {
+    quizActive = !quizActive;
+    const panel = document.getElementById("quiz-panel");
+    const btn   = document.getElementById("quiz-btn");
+
+    if (quizActive) {
+      quizScore = 0; quizRound = 0; holdFrames = 0; quizTarget = null;
+      panel.style.display = "block";
+      btn.textContent     = "⏹ Stop Quiz";
+      btn.style.background = "var(--accent)";
+      btn.style.color      = "#fff";
+      nextRound();
+    } else {
+      panel.style.display  = "none";
+      btn.textContent      = "▶ Start Quiz";
+      btn.style.background = "";
+      btn.style.color      = "";
+    }
+  }
+
+  // ── How it works panel ─────────────────────────────────────────────────────
+  function toggleHow() {
+    const p   = document.getElementById("how-panel");
+    const btn = document.getElementById("how-btn");
+    const open = p.style.display === "block";
+    p.style.display  = open ? "none" : "block";
+    btn.textContent  = open ? "How it works" : "Hide explanation";
+  }
+
+  // ── Reset ──────────────────────────────────────────────────────────────────
+  function goBack() {
+    if (webcam) { webcam.stop(); webcam = null; }
+    model = null; quizActive = false;
+    document.getElementById("webcam-container").innerHTML = "";
+    document.getElementById("quiz-panel").style.display   = "none";
+    document.getElementById("how-panel").style.display    = "none";
+    document.getElementById("quiz-btn").textContent       = "▶ Start Quiz";
+    document.getElementById("quiz-btn").style.background  = "";
+    document.getElementById("quiz-btn").style.color       = "";
+    document.getElementById("app-screen").style.display   = "none";
+    document.getElementById("setup-screen").style.display = "flex";
+    const btn = document.querySelector("#setup-screen .btn-primary");
+    btn.textContent = "Load Model & Start Camera";
+    btn.disabled    = false;
+  }
+</script>
+</body>
+</html>

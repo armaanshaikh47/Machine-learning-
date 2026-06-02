@@ -637,25 +637,15 @@ service firebase.storage {
     } catch { return "student"; }
   }
 
-  // ── Config ─────────────────────────────────────────────────────────────────
-  function storedCfg() {
-    try { return JSON.parse(localStorage.getItem("dt-fb-cfg")); } catch { return null; }
-  }
-
-  function saveConfig() {
-    const cfg = {
-      apiKey:            v("c-apiKey"),
-      authDomain:        v("c-authDomain"),
-      projectId:         v("c-projectId"),
-      storageBucket:     v("c-storageBucket"),
-      messagingSenderId: v("c-msgSenderId"),
-      appId:             v("c-appId")
-    };
-    if (!cfg.apiKey || !cfg.projectId) { toast("Fill in API Key and Project ID at minimum.","error"); return; }
-    localStorage.setItem("dt-fb-cfg", JSON.stringify(cfg));
-    initFB(cfg);
-    show("loading");
-  }
+  // ── Firebase config (hardcoded) ────────────────────────────────────────────
+  const FB_CONFIG = {
+    apiKey:            "AIzaSyBKgOwC-euunjHwcY2VwQyJhH0mUBE9Yqc",
+    authDomain:        "tool-titans.firebaseapp.com",
+    projectId:         "tool-titans",
+    storageBucket:     "tool-titans.firebasestorage.app",
+    messagingSenderId: "78757051050",
+    appId:             "1:78757051050:web:5e1caa24129e8a98b96ed3"
+  };
 
   // ── Routing / views ────────────────────────────────────────────────────────
   function show(name) {
@@ -1167,9 +1157,7 @@ service firebase.storage {
 
   // ── Boot ───────────────────────────────────────────────────────────────────
   (function boot() {
-    const cfg = storedCfg();
-    if (cfg) { initFB(cfg); }
-    else     { show("config"); }
+    initFB(FB_CONFIG);
   })();
 </script>
 </body>

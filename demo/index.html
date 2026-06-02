@@ -8,7 +8,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -599,7 +598,7 @@ service firebase.storage {
   };
 
   // ── App state ──────────────────────────────────────────────────────────────
-  let auth, db, storage;
+  let auth, db;
   let CU = null;        // current Firebase user (or null)
   let role = "guest";   // "guest" | "student" | "teacher" | "admin"
   let allTools = [];    // cached tool docs
@@ -616,7 +615,6 @@ service firebase.storage {
     firebase.initializeApp(cfg);
     auth    = firebase.auth();
     db      = firebase.firestore();
-    storage = firebase.storage();
 
     auth.onAuthStateChanged(async u => {
       CU = u;
@@ -866,12 +864,38 @@ service firebase.storage {
     stageFiles(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/")));
   }
 
+  // Resize + compress an image file to a base64 JPEG (max 500px, ~80KB)
+  function compressImage(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = reject;
+      reader.onload = ev => {
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          const MAX = 500;
+          let w = img.width, h = img.height;
+          if (w > MAX || h > MAX) {
+            if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+            else       { w = Math.round(w * MAX / h); h = MAX; }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", 0.75));
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   function stageFiles(files) {
     const existingCount = editingTool ? (editingTool.photos||[]).length : 0;
     const slots = 5 - existingCount - stagingFiles.length;
     if (slots <= 0) { toast("Maximum 5 photos per tool.","info"); return; }
     files.slice(0, slots).forEach(f => {
-      if (f.size > 2*1024*1024) { toast(`${f.name} exceeds 2 MB — skipped.`,"error"); return; }
+      if (!f.type.startsWith("image/")) return;
       const idx = stagingFiles.push(f) - 1;
       const r = new FileReader();
       r.onload = ev => {
@@ -901,29 +925,26 @@ service firebase.storage {
       toast("At least one photo is required.","error"); return;
     }
 
-    const btn = ge("save-btn"); btn.disabled = true; btn.textContent = "Uploading…";
+    const btn = ge("save-btn"); btn.disabled = true; btn.textContent = "Saving…";
     try {
-      const toolId  = ge("edit-id").value || db.collection("tools").doc().id;
-      const newUrls = [];
-      for (let i = 0; i < stagingFiles.length; i++) {
-        const f   = stagingFiles[i];
-        const ref = storage.ref(`tools/${toolId}/${Date.now()}_${i}_${f.name}`);
-        await ref.put(f);
-        newUrls.push(await ref.getDownloadURL());
+      // Compress each new image to base64 JPEG (stored directly in Firestore)
+      const newBase64 = [];
+      for (const f of stagingFiles) {
+        newBase64.push(await compressImage(f));
       }
-      const photos       = [...existingPhotos, ...newUrls];
+      const photos       = [...existingPhotos, ...newBase64];
       const thumbnailUrl = photos[0] || "";
       const data = { name, category:cat, description:desc, photos, thumbnailUrl,
                      updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
 
       if (ge("edit-id").value) {
-        await db.collection("tools").doc(toolId).update(data);
+        await db.collection("tools").doc(ge("edit-id").value).update(data);
         toast("Tool updated!","success");
       } else {
         data.addedBy      = CU?.uid || "anonymous";
         data.addedByEmail = CU?.email || "guest";
         data.createdAt    = firebase.firestore.FieldValue.serverTimestamp();
-        await db.collection("tools").doc(toolId).set(data);
+        await db.collection("tools").add(data);
         toast("Tool added!","success");
       }
       stagingFiles = []; editingTool = null;
@@ -941,9 +962,6 @@ service firebase.storage {
       `Permanently delete "${viewingTool.name}" and all its photos? This cannot be undone.`,
       async () => {
         try {
-          for (const url of (viewingTool.photos||[])) {
-            try { await storage.refFromURL(url).delete(); } catch {}
-          }
           await db.collection("tools").doc(viewingTool.id).delete();
           toast("Deleted.","success");
           viewingTool = null;
@@ -1115,8 +1133,6 @@ service firebase.storage {
       `Permanently delete "${name}" and all its photos?`,
       async () => {
         try {
-          const s = await db.collection("tools").doc(id).get();
-          if (s.exists) for (const u of (s.data().photos||[])) try { await storage.refFromURL(u).delete(); } catch {}
           await db.collection("tools").doc(id).delete();
           toast("Deleted.","success");
           allTools = allTools.filter(t => t.id !== id);

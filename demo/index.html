@@ -89,18 +89,7 @@
             border-radius:50%; animation:rot .7s linear infinite; margin:48px auto; display:block; }
     @keyframes rot { to { transform:rotate(360deg); } }
 
-    /* === Config Screen === */
-    #view-config { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
-    .cfg-card { max-width:560px; width:100%; }
-    .cfg-card h1 { color:var(--accent); font-size:1.4rem; margin-bottom:8px; }
-    .cfg-card p  { color:var(--muted); font-size:.88rem; line-height:1.65; margin-bottom:16px; }
-    .rules-box { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:14px;
-                 font-family:monospace; font-size:.75rem; color:var(--gold); overflow-x:auto;
-                 white-space:pre; margin-bottom:16px; line-height:1.5; }
-    details summary { cursor:pointer; color:var(--blue); font-size:.85rem; margin-bottom:8px; user-select:none; }
-    details[open] summary { margin-bottom:12px; }
-
-    /* === Auth Screen === */
+/* === Auth Screen === */
     #view-auth { min-height:calc(100vh - 56px); display:flex; align-items:center; justify-content:center; padding:24px; }
     .auth-card { max-width:400px; width:100%; }
     .auth-logo { text-align:center; margin-bottom:24px; }
@@ -279,61 +268,6 @@
   </nav>
 </header>
 
-<!-- ── View: Firebase Config ──────────────────────────────── -->
-<section id="view-config">
-  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;">
-    <div class="card cfg-card">
-      <h1>🔧 First-Time Setup</h1>
-      <p>Enter your Firebase project credentials below. They'll be saved in your browser so you only do this once.</p>
-      <p>Go to <strong>console.firebase.google.com</strong> → create a project → Add Web App → copy the config fields below. Then enable <strong>Authentication</strong> (Email/Password), <strong>Firestore</strong>, and <strong>Storage</strong>.</p>
-
-      <details style="margin-bottom:20px;">
-        <summary>Show required security rules</summary>
-        <p style="color:var(--muted);font-size:.8rem;margin-bottom:8px;">Paste these in Firebase Console → Firestore → Rules, and Storage → Rules:</p>
-        <div class="rules-box">Firestore:
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    function isAdmin() { return request.auth.token.email == "armaanbs@gmail.com"; }
-    function isTeacher() {
-      return request.auth != null &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "teacher";
-    }
-    match /tools/{id} {
-      allow read:          if true;
-      allow create:        if isAdmin() || isTeacher();
-      allow update,delete: if isAdmin();
-    }
-    match /users/{uid} {
-      allow read,create:   if request.auth.uid == uid;
-      allow update,delete: if isAdmin() || request.auth.uid == uid;
-    }
-  }
-}
-
-Storage:
-rules_version = '2';
-service firebase.storage {
-  match /b/{bucket}/o {
-    match /tools/{allPaths=**} {
-      allow read:   if true;
-      allow write:  if request.auth != null;
-      allow delete: if request.auth.token.email == "armaanbs@gmail.com";
-    }
-  }
-}</div>
-      </details>
-
-      <div class="fg"><label class="lbl">API Key</label><input type="text" id="c-apiKey"     placeholder="AIza…" /></div>
-      <div class="fg"><label class="lbl">Auth Domain</label><input type="text" id="c-authDomain" placeholder="project.firebaseapp.com" /></div>
-      <div class="fg"><label class="lbl">Project ID</label><input type="text" id="c-projectId"  placeholder="my-dt-tools" /></div>
-      <div class="fg"><label class="lbl">Storage Bucket</label><input type="text" id="c-storageBucket" placeholder="project.appspot.com" /></div>
-      <div class="fg"><label class="lbl">Messaging Sender ID</label><input type="text" id="c-msgSenderId" placeholder="123456789" /></div>
-      <div class="fg"><label class="lbl">App ID</label><input type="text" id="c-appId" placeholder="1:123:web:abc…" /></div>
-      <button class="btn btn-primary btn-full btn-lg" onclick="saveConfig()">Save &amp; Connect</button>
-    </div>
-  </div>
-</section>
 
 <!-- ── View: Auth ──────────────────────────────────────────── -->
 <section id="view-auth">

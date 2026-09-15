@@ -287,6 +287,9 @@
         <div class="fg"><label class="lbl">Email</label><input type="email"    id="in-email" placeholder="you@example.com" /></div>
         <div class="fg"><label class="lbl">Password</label><input type="password" id="in-pw"    placeholder="••••••••" /></div>
         <button class="btn btn-primary btn-full" id="in-btn" onclick="doSignIn()">Sign In</button>
+        <p style="text-align:center;margin-top:8px;font-size:.85rem;">
+          <a href="#" onclick="resetPassword();return false;" style="color:var(--accent);">Forgot password?</a>
+        </p>
       </div>
 
       <div id="form-reg" class="hidden">
@@ -626,6 +629,15 @@
   }
 
   function continueGuest() { loadGallery(); }
+
+  async function resetPassword() {
+    const email = v("in-email");
+    if (!email) { toast("Enter your email address first, then click Forgot password.", "info"); return; }
+    try {
+      await auth.sendPasswordResetEmail(email);
+      toast("Password reset email sent — check your inbox.", "success");
+    } catch(e) { toast(authErr(e), "error"); }
+  }
 
   async function doSignIn() {
     const email = v("in-email"), pw = v("in-pw");
